@@ -1782,8 +1782,6 @@ function HomePage({ setPage }) {
         </div>
       </div>
 
-      <WaitlistSection setPage={setPage} />
-
       <div style={{ background: "#F8F5EE", borderTop: "1px solid #E2DCCC", padding: "48px 24px", textAlign: "center" }}>
         <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 26, textTransform: "uppercase", marginBottom: 10 }}>
           Help us build the best freight platform
@@ -2041,16 +2039,77 @@ function LoginForm({ role, accent, existing, onBack, onSubmit, embedded }) {
             </>
           )}
 
-          {/* 🧪 TEST MODE — DOT/MC, COI, business verification, and Stripe all skipped.
-              Do a full real signup with actual paperwork on the PRODUCTION file before launch. */}
-          <div style={{ fontSize: 11, color: "#3E7A4B", fontWeight: 700, background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-            🧪 TEST MODE — DOT/MC, COI, business verification, and Stripe are all skipped
+          {/* 🧪 TEST MODE — DOT/MC, COI, and business verification are still
+              skipped for fast testing. Card entry is real (mock) so you can
+              test the full payment UX before wiring in real Stripe. */}
+          <div style={{ fontSize: 11, color: "#3E7A4B", fontWeight: 700, background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+            🧪 TEST MODE — DOT/MC, COI, and business verification are skipped
+          </div>
+
+          {/* ── STRIPE SECTION ── */}
+          <div style={{ borderTop: "1px solid #EEE8DA", paddingTop: 12 }}>
+            {role === "trucker" ? (
+              // Carrier — connect Stripe payout account
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                  <CreditCard size={13} color="#635BFF" /> Required: connect your Stripe payout account
+                </div>
+                <div style={{ fontSize: 11, color: "#6B6557", marginBottom: 8, lineHeight: 1.5 }}>
+                  Stripe is used to deposit your load earnings directly to your bank account. Free instant payouts, no fees. You'll need a Stripe account — create one free at stripe.com.
+                </div>
+                {!stripeConnected ? (
+                  <button onClick={connectStripePayoutMock} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
+                    <CreditCard size={15} /> Connect with Stripe — receive payments
+                  </button>
+                ) : (
+                  <div style={{ background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#3E7A4B" }}>
+                    <CheckCircle2 size={15} /> Stripe payout account connected — you're ready to receive payments
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: "#9A958A", marginTop: 6 }}>
+                  Secured by Stripe. Direct Freight Co never sees your bank account details.
+                </div>
+              </div>
+            ) : (
+              // Shipper — add payment method
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                  <CreditCard size={13} color="#635BFF" /> Required: add a payment method
+                </div>
+                <div style={{ fontSize: 11, color: "#6B6557", marginBottom: 8, lineHeight: 1.5 }}>
+                  Your card is charged for load payments and any automated detention fees. Subscriptions are billed here too.
+                </div>
+                {!stripeConnected ? (
+                  !showStripeCard ? (
+                    <button onClick={() => setShowStripeCard(true)} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
+                      <CreditCard size={15} /> Add payment method
+                    </button>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#F8F5EE", borderRadius: 8, padding: 12 }}>
+                      <Field label="Name on card"><input value={stripeNameOnCard} onChange={(e) => setStripeNameOnCard(e.target.value)} style={inputStyle} /></Field>
+                      <Field label="Card number"><input value={stripeCardNumber} onChange={(e) => setStripeCardNumber(formatCard(e.target.value))} placeholder="4242 4242 4242 4242" style={inputStyle} /></Field>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <Field label="Expiry"><input value={stripeExp} onChange={(e) => setStripeExp(formatExp(e.target.value))} placeholder="MM/YY" style={inputStyle} /></Field>
+                        <Field label="CVC"><input value={stripeCvc} onChange={(e) => setStripeCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="123" style={inputStyle} /></Field>
+                      </div>
+                      <button onClick={saveStripeCard} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save card</button>
+                      <div style={{ fontSize: 10, color: "#9A958A" }}>Secured by Stripe Elements. Direct Freight Co never stores raw card numbers.</div>
+                    </div>
+                  )
+                ) : (
+                  <div style={{ background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#3E7A4B" }}>
+                    <CheckCircle2 size={15} /> Card ending in {stripeCardNumber.replace(/\D/g, "").slice(-4)} added — you're ready to post loads
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <TermsCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} onOpenTerms={() => setShowTerms(true)} role={role} />
-          <button onClick={trySignup} disabled={!agreedToTerms} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms ? 1 : 0.5 }}>
+          <button onClick={trySignup} disabled={!agreedToTerms || !stripeConnected} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms && stripeConnected ? 1 : 0.5 }}>
             Create account
           </button>
+          {!stripeConnected && <div style={{ fontSize: 11, color: "#C0432B", textAlign: "center" }}>{role === "trucker" ? "Connect your Stripe account above to continue" : "Add a payment method above to continue"}</div>}
         </div>
       )}
     </Card>
@@ -3152,13 +3211,55 @@ function CorpLoginForm({ subtype, existing, onBack, onSubmit, embedded, selected
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <Field label="Company name"><input value={companyName} onChange={(e) => setCompanyName(e.target.value)} style={inputStyle} /></Field>
           <Field label="Company email"><input value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} /></Field>
-          {/* 🧪 TEST MODE — DOT/MC, COI, business verification, and Stripe all skipped */}
-          <div style={{ fontSize: 11, color: "#3E7A4B", fontWeight: 700, background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 5 }}>
-            🧪 TEST MODE — DOT/MC, COI, business verification, and Stripe are all skipped
+          {/* 🧪 TEST MODE — DOT/MC, COI, and business verification are still
+              skipped for fast testing. Card entry is real (mock) so you can
+              test the full payment UX before wiring in real Stripe. */}
+          <div style={{ fontSize: 11, color: "#3E7A4B", fontWeight: 700, background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+            🧪 TEST MODE — DOT/MC, COI, and business verification are skipped
+          </div>
+
+          {/* ── STRIPE SECTION ── */}
+          <div style={{ borderTop: "1px solid #EEE8DA", paddingTop: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+              <CreditCard size={13} color="#635BFF" />
+              {subtype === "trucking" ? "Required: connect your Stripe payout account" : "Required: add a payment method"}
+            </div>
+            <div style={{ fontSize: 11, color: "#6B6557", marginBottom: 8, lineHeight: 1.5 }}>
+              {subtype === "trucking"
+                ? "Stripe deposits load earnings directly to your company bank account. Free instant payouts, no fees."
+                : "Your card is charged for load payments and detention fees. Subscriptions are billed here too."}
+            </div>
+            {!stripeConnected ? (
+              subtype === "trucking" ? (
+                <button onClick={() => setStripeConnected(true)} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
+                  <CreditCard size={15} /> Connect company with Stripe — receive payments
+                </button>
+              ) : !showStripeCard ? (
+                <button onClick={() => setShowStripeCard(true)} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
+                  <CreditCard size={15} /> Add payment method
+                </button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#F8F5EE", borderRadius: 8, padding: 12 }}>
+                  <Field label="Name on card"><input value={stripeNameOnCard} onChange={(e) => setStripeNameOnCard(e.target.value)} style={inputStyle} /></Field>
+                  <Field label="Card number"><input value={stripeCardNumber} onChange={(e) => setStripeCardNumber(formatCard(e.target.value))} placeholder="4242 4242 4242 4242" style={inputStyle} /></Field>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Field label="Expiry"><input value={stripeExp} onChange={(e) => setStripeExp(formatExp(e.target.value))} placeholder="MM/YY" style={inputStyle} /></Field>
+                    <Field label="CVC"><input value={stripeCvc} onChange={(e) => setStripeCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="123" style={inputStyle} /></Field>
+                  </div>
+                  <button onClick={() => { const d = stripeCardNumber.replace(/\D/g,""); if(d.length<12||!stripeExp||!stripeCvc||!stripeNameOnCard){alert("Fill in all card fields.");return;} setStripeConnected(true); setShowStripeCard(false); }} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save card</button>
+                </div>
+              )
+            ) : (
+              <div style={{ background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#3E7A4B" }}>
+                <CheckCircle2 size={15} /> {subtype === "trucking" ? "Stripe payout account connected" : `Card ending in ${stripeCardNumber.replace(/\D/g,"").slice(-4)||"••••"} added`} — you're ready to go
+              </div>
+            )}
+            <div style={{ fontSize: 10, color: "#9A958A", marginTop: 6 }}>Secured by Stripe. Direct Freight Co never stores raw card or bank account numbers.</div>
           </div>
 
           <TermsCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} onOpenTerms={() => setShowTerms(true)} role={subtype} />
-          <button onClick={trySignup} disabled={!agreedToTerms} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms ? 1 : 0.5 }}>Create company account</button>
+          <button onClick={trySignup} disabled={!agreedToTerms || !stripeConnected} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms && stripeConnected ? 1 : 0.5 }}>Create company account</button>
+          {!stripeConnected && <div style={{ fontSize: 11, color: "#C0432B", textAlign: "center" }}>{subtype === "trucking" ? "Connect your Stripe account above to continue" : "Add a payment method above to continue"}</div>}
         </div>
       )}
     </Card>
@@ -9326,4 +9427,3 @@ function SEOLandingPages({ setPage }) {
     </div>
   );
 }
-
