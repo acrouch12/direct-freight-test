@@ -509,6 +509,26 @@ const PROMO_STORE = {
 // ── Supabase / Backend config ──
 const API_URL = "https://hauldirect-api-production.up.railway.app";
 
+// ── Stripe (test mode) ──
+const STRIPE_PUBLISHABLE_KEY = "pk_test_51ToTe2J28X4kZ2KobSgK2f7cak9aGM6jEMOKKQjpYvlitAOPbbPztnoajscEwaiDnezUX4LqKqEi2YFQDoyV8LXF00vFo1k9c2";
+
+function startStripeConnect(userId, corpId) {
+  const params = new URLSearchParams({ userId });
+  if (corpId) params.set("corpId", corpId);
+  window.location.href = `${API_URL}/api/stripe/connect/authorize?${params.toString()}`;
+}
+
+async function startStripeCheckout({ userId, email, planId, billingCycle, planLabel }) {
+  try {
+    const res = await api.post("/api/stripe/create-checkout-session", { userId, email, planId, billingCycle, planLabel });
+    if (res?.url) { window.location.href = res.url; return true; }
+    throw new Error("No checkout URL returned");
+  } catch (err) {
+    alert("Could not start checkout: " + err.message + "\n\nMake sure Stripe is fully configured on the backend.");
+    return false;
+  }
+}
+
 // API helper — all database calls go through your Railway backend
 const api = {
   async post(path, body) {
@@ -746,6 +766,25 @@ export default function HaulBoard() {
   const [notifications, setNotifications] = useState([]);
   const [showSessionWarning, setShowSessionWarning] = useState(false);
 
+  // Handles the redirect back from Stripe (Connect OAuth or Checkout) —
+  // shows the user what happened and cleans the URL so refreshing doesn't
+  // re-trigger the same message.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connectResult = params.get("stripe_connect");
+    const checkoutResult = params.get("stripe_checkout");
+    if (connectResult) {
+      if (connectResult === "success") alert("✅ Stripe payout account connected! You're ready to receive payments.");
+      else if (connectResult === "cancelled") alert("Stripe connection was cancelled. You can connect your payout account anytime from your Profile page.");
+      else alert("Something went wrong connecting Stripe. Please try again from your Profile page, or contact support if this keeps happening.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (checkoutResult) {
+      if (checkoutResult === "success") alert("✅ Payment method added and subscription started!");
+      else if (checkoutResult === "cancelled") alert("Checkout was cancelled. You can add a payment method anytime from your Billing tab.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // Persist session to localStorage so refreshing the page keeps you logged in.
   // Operator sessions are never persisted — the PIN must be re-entered every time.
   const setSession = (next) => {
@@ -971,6 +1010,7 @@ export default function HaulBoard() {
               const mappedUser = dbUserToFrontend(user);
               setIndependentShippers((p) => upsert(p, mappedUser));
               startEmailVerification(mappedUser.email, mappedUser.name, { role: "shipper", corpId: null, profileId: mappedUser.id });
+              startStripeCheckout({ userId: mappedUser.id, email: mappedUser.email, planId: "solo_shipper", billingCycle: "monthly", planLabel: "Shipper" });
             } catch (err) {
               try {
                 const { user } = await api.post("/api/auth/login", { email: s.email });
@@ -992,6 +1032,7 @@ export default function HaulBoard() {
               const mappedUser = dbUserToFrontend(user);
               setIndependentTruckers((p) => upsert(p, mappedUser));
               startEmailVerification(mappedUser.email, mappedUser.name, { role: "trucker", corpId: null, profileId: mappedUser.id });
+              startStripeConnect(mappedUser.id);
             } catch (err) {
               try {
                 const { user } = await api.post("/api/auth/login", { email: t.email });
@@ -1280,42 +1321,42 @@ function Shell({ title, subtitle, badge, avatar, me, onLogout, onSwitchProfile, 
         input:focus, textarea:focus, select:focus { outline: 2px solid #FFB400; outline-offset: 1px; }
       `}</style>
       <header style={{
-        background: "#1B1D21", color: "#F2EDE4",
+        background: "#FFB400", color: "#1B1D21",
         padding: isMobile ? "12px 16px" : "16px 24px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        borderBottom: "4px solid #FFB400", flexWrap: "wrap", gap: 8,
+        borderBottom: "4px solid #1B1D21", flexWrap: "wrap", gap: 8,
         position: "sticky", top: 0, zIndex: 50,
       }}>
-        <Logo size={isMobile ? 32 : 40} variant="light" showTagline={!isMobile} />
+        <Logo size={isMobile ? 32 : 40} variant="dark" showTagline={!isMobile} />
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 14 }}>
           <ProfilePicture src={avatar} name={title} size={isMobile ? 30 : 38} />
           {!isMobile && (
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
-              {subtitle && <div className="mono" style={{ fontSize: 11, color: "#9A958A" }}>{subtitle}</div>}
+              {subtitle && <div className="mono" style={{ fontSize: 11, color: "#6B5106" }}>{subtitle}</div>}
             </div>
           )}
           {badge}
           {!isMobile && (
-            <button onClick={() => setShowFeedback(true)} style={{ background: "transparent", border: "1px solid #FFB400", color: "#FFB400", borderRadius: 6, padding: "8px 12px", fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+            <button onClick={() => setShowFeedback(true)} style={{ background: "transparent", border: "1px solid #1B1D21", color: "#1B1D21", borderRadius: 6, padding: "8px 12px", fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
               ⭐ Review
             </button>
           )}
           {onSwitchProfile && !isMobile && (
-            <button onClick={onSwitchProfile} style={{ background: "transparent", border: "1px solid #44484D", color: "#F2EDE4", borderRadius: 6, padding: "8px 12px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+            <button onClick={onSwitchProfile} style={{ background: "transparent", border: "1px solid #1B1D21", color: "#1B1D21", borderRadius: 6, padding: "8px 12px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
               <RefreshCcw size={14} /> Switch profile
             </button>
           )}
-          <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #44484D", color: "#F2EDE4", borderRadius: 6, padding: isMobile ? "6px 10px" : "8px 12px", fontSize: isMobile ? 12 : 13, display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #1B1D21", color: "#1B1D21", borderRadius: 6, padding: isMobile ? "6px 10px" : "8px 12px", fontSize: isMobile ? 12 : 13, display: "flex", alignItems: "center", gap: 6 }}>
             <ArrowLeft size={14} /> {isMobile ? "Out" : "Log out"}
           </button>
         </div>
       </header>
       <main style={{ padding: isMobile ? "12px" : "24px", maxWidth: 1180, margin: "0 auto", paddingBottom: isMobile ? 80 : 24 }}>{children}</main>
       {!isMobile && (
-        <div style={{ borderTop: "1px solid #E2DCCC", padding: "12px 24px", background: "#F8F5EE", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ borderTop: "1px solid #1B1D21", padding: "12px 24px", background: "#FFB400", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <ShellFooter />
-          <button onClick={() => setShowFeedback(true)} style={{ background: "none", border: "1px solid #E2DCCC", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "#6B6557", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+          <button onClick={() => setShowFeedback(true)} style={{ background: "none", border: "1px solid #1B1D21", borderRadius: 6, padding: "6px 12px", fontSize: 12, color: "#1B1D21", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
             ⭐ Leave a review
           </button>
         </div>
@@ -1341,7 +1382,7 @@ function MobileBottomNav({ tabs, activeTab, onSelect }) {
     <>
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
-        background: "#1B1D21", borderTop: "2px solid #FFB400",
+        background: "#FFB400", borderTop: "2px solid #1B1D21",
         display: "flex", alignItems: "stretch",
       }}>
         {visible.map((t) => {
@@ -1349,10 +1390,10 @@ function MobileBottomNav({ tabs, activeTab, onSelect }) {
           return (
             <button key={t.id} onClick={() => onSelect(t.id)} style={{
               flex: 1, padding: "10px 4px 8px", border: "none",
-              background: active ? "#FFB400" : "transparent",
-              color: active ? "#1B1D21" : "#9A958A",
+              background: active ? "#1B1D21" : "transparent",
+              color: active ? "#FFB400" : "#6B5106",
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-              fontSize: 9, fontWeight: active ? 700 : 500, textTransform: "uppercase",
+              fontSize: 9, fontWeight: active ? 700 : 600, textTransform: "uppercase",
               letterSpacing: "0.03em", cursor: "pointer", minWidth: 0,
             }}>
               {t.icon && <span style={{ fontSize: 18 }}>{t.icon}</span>}
@@ -1365,10 +1406,10 @@ function MobileBottomNav({ tabs, activeTab, onSelect }) {
         {hasOverflow && (
           <button onClick={() => setShowMore(true)} style={{
             flex: 1, padding: "10px 4px 8px", border: "none",
-            background: overflowHasActive ? "#FFB400" : "transparent",
-            color: overflowHasActive ? "#1B1D21" : "#9A958A",
+            background: overflowHasActive ? "#1B1D21" : "transparent",
+            color: overflowHasActive ? "#FFB400" : "#6B5106",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-            fontSize: 9, fontWeight: overflowHasActive ? 700 : 500, textTransform: "uppercase",
+            fontSize: 9, fontWeight: overflowHasActive ? 700 : 600, textTransform: "uppercase",
             letterSpacing: "0.03em", cursor: "pointer", minWidth: 0,
           }}>
             <span style={{ fontSize: 18 }}>⋯</span>
@@ -1408,7 +1449,7 @@ function ShellFooter({ onFooterClick }) {
   const [showShipperAgreement, setShowShipperAgreement] = useState(false);
   const [showContact, setShowContact] = useState(false);
   return (
-    <footer style={{ borderTop: "1px solid #E2DCCC", padding: "12px 24px", background: "#F8F5EE" }}>
+    <footer style={{ padding: "12px 24px", background: "#FFB400" }}>
       <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap", marginBottom: 8 }}>
         {[
           ["Terms of Service", () => setShowTerms(true)],
@@ -1417,15 +1458,15 @@ function ShellFooter({ onFooterClick }) {
           ["Shipper Agreement", () => setShowShipperAgreement(true)],
           ["Contact", () => setShowContact(true)],
         ].map(([label, fn]) => (
-          <button key={label} onClick={fn} style={{ background: "none", border: "none", color: "#6B6557", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", padding: 0 }}>
+          <button key={label} onClick={fn} style={{ background: "none", border: "none", color: "#1B1D21", fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer", padding: 0 }}>
             <FileText size={11} /> {label}
           </button>
         ))}
       </div>
-      <div style={{ fontSize: 11, color: "#9A958A", textAlign: "center", maxWidth: 680, margin: "0 auto", lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, color: "#1B1D21", textAlign: "center", maxWidth: 680, margin: "0 auto", lineHeight: 1.5 }}>
         <b>Legal notice:</b> Direct Freight is a technology platform and information aggregator only — not a freight broker, carrier, insurer, or financial institution. Nothing on this platform constitutes legal, tax, or financial advice. Always consult qualified professionals for those needs.
       </div>
-      <div style={{ fontSize: 10, color: "#C9C2B3", textAlign: "center", marginTop: 6, userSelect: "none" }}>
+      <div style={{ fontSize: 10, color: "#6B5106", textAlign: "center", marginTop: 6, userSelect: "none" }}>
         © 2026 Direct Freight Co LLC. All rights reserved.
       </div>
       {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
@@ -1702,14 +1743,14 @@ function MarketingNav({ page, setPage }) {
     { id: "lanes",    label: "Freight Lanes" },
   ];
   return (
-    <header style={{ background: "#1B1D21", color: "#F2EDE4", padding: isMobile ? "12px 16px" : "16px 24px", display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", borderBottom: "4px solid #FFB400", gap: isMobile ? 10 : 14, position: "sticky", top: 0, zIndex: 50 }}>
+    <header style={{ background: "#FFB400", color: "#1B1D21", padding: isMobile ? "12px 16px" : "16px 24px", display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", justifyContent: "space-between", borderBottom: "4px solid #1B1D21", gap: isMobile ? 10 : 14, position: "sticky", top: 0, zIndex: 50 }}>
       <button onClick={() => setPage("home")} style={{ display: "flex", alignItems: "center", gap: 10, background: "none", border: "none" }}>
-        <Logo size={isMobile ? 32 : 40} variant="light" showTagline />
+        <Logo size={isMobile ? 32 : 40} variant="dark" showTagline />
       </button>
       <nav style={{ display: "flex", gap: 4, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         {links.map((l) => (
           <button key={l.id} onClick={() => setPage(l.id)} style={{
-            background: page === l.id ? "#FFB400" : "transparent", color: page === l.id ? "#1B1D21" : "#F2EDE4",
+            background: page === l.id ? "#1B1D21" : "transparent", color: page === l.id ? "#FFB400" : "#1B1D21",
             border: "none", borderRadius: 6, padding: isMobile ? "10px 14px" : "9px 16px", fontWeight: 700, fontSize: isMobile ? 14 : 13, whiteSpace: "nowrap", minHeight: 44,
           }}>{l.label}</button>
         ))}
@@ -1752,13 +1793,13 @@ function HomePage({ setPage }) {
         </div>
       </div>
 
-      <div style={{ background: "#fff", borderTop: "1px solid #E2DCCC", borderBottom: "1px solid #E2DCCC", padding: "56px 24px" }}>
+      <div style={{ background: "#1B1D21", padding: "56px 24px" }}>
         <div style={{ maxWidth: 980, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 36 }}>
-            <div className="stencil" style={{ fontSize: 13, color: "#9A958A", marginBottom: 8 }}>Pricing</div>
-            <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 26, textTransform: "uppercase" }}>One flat subscription. No commission, ever.</div>
-            <div style={{ fontSize: 14, color: "#6B6557", marginTop: 8 }}>Direct Freight Co never takes a percentage of your load, bid, or freight payment — subscription fees are the only charge.</div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#1B1D21", color: "#FFB400", borderRadius: 8, padding: "8px 16px", marginTop: 14, fontSize: 13, fontWeight: 700 }}>
+            <div className="stencil" style={{ fontSize: 13, color: "#FFB400", marginBottom: 8 }}>Pricing</div>
+            <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 26, textTransform: "uppercase", color: "#F2EDE4" }}>One flat subscription. No commission, ever.</div>
+            <div style={{ fontSize: 14, color: "#C9C2B3", marginTop: 8 }}>Direct Freight Co never takes a percentage of your load, bid, or freight payment — subscription fees are the only charge.</div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#FFB400", color: "#1B1D21", borderRadius: 8, padding: "8px 16px", marginTop: 14, fontSize: 13, fontWeight: 700 }}>
               <Zap size={14} /> Launch offer: 30 days free — all plans, no credit card required
             </div>
           </div>
@@ -1774,7 +1815,7 @@ function HomePage({ setPage }) {
               "✓ No credit card required to start",
               "✓ Annual plan saves 2 months",
             ].map((item) => (
-              <div key={item} style={{ fontSize: 13, color: "#6B6557", display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}>
+              <div key={item} style={{ fontSize: 13, color: "#F2EDE4", display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}>
                 {item}
               </div>
             ))}
@@ -1782,7 +1823,7 @@ function HomePage({ setPage }) {
         </div>
       </div>
 
-      <div style={{ background: "#F8F5EE", borderTop: "1px solid #E2DCCC", padding: "48px 24px", textAlign: "center" }}>
+      <div style={{ background: "#fff", padding: "48px 24px", textAlign: "center" }}>
         <div style={{ fontFamily: "Oswald, sans-serif", fontWeight: 700, fontSize: 26, textTransform: "uppercase", marginBottom: 10 }}>
           Help us build the best freight platform
         </div>
@@ -1970,9 +2011,9 @@ function LoginForm({ role, accent, existing, onBack, onSubmit, embedded }) {
   };
 
   const trySignup = () => {
-    // 🧪 TEST MODE — all real verification (business doc, COI, DOT/MC, Stripe)
-    // is skipped so you can test the rest of the platform quickly. Do a full
-    // real signup with actual paperwork on the PRODUCTION file before launch.
+    // 🧪 TEST MODE — DOT/MC, COI, and business verification are still
+    // skipped for fast testing. Stripe is now real (test mode) — right
+    // after account creation, you'll be sent to Stripe's real test pages.
     if (!name || !email) { alert("Name and email are required."); return; }
     if (!company.trim()) { alert("Business name is required, and must match the name on your insurance and business paperwork."); return; }
     if (!agreedToTerms) { alert("You must agree to the Terms of Service to create an account."); return; }
@@ -1984,15 +2025,14 @@ function LoginForm({ role, accent, existing, onBack, onSubmit, embedded }) {
       mcNumber: onboarding?.data?.mcNumber || null,
       dotNumber: onboarding?.data?.dotNumber || null,
       verification: onboarding?.data || null,
-      // Stripe info stored safely — in production only the Stripe customer/account ID is stored
-      stripeConnected: true,
+      stripeConnected: false,
       bizVerified: true,
       bizData: bizData,
       coiVerified: true,
       trialStartedAt: new Date().toISOString(),
       coiData: coiData,
-      billing: role === "shipper" ? { connected: true, last4: stripeCardNumber.replace(/\D/g, "").slice(-4), exp: stripeExp, nameOnCard: stripeNameOnCard } : null,
-      payout: role === "trucker" ? { connected: true, provider: "Stripe Connect" } : null,
+      billing: null,
+      payout: role === "trucker" ? { connected: false } : null,
     });
   };
 
@@ -2040,76 +2080,29 @@ function LoginForm({ role, accent, existing, onBack, onSubmit, embedded }) {
           )}
 
           {/* 🧪 TEST MODE — DOT/MC, COI, and business verification are still
-              skipped for fast testing. Card entry is real (mock) so you can
-              test the full payment UX before wiring in real Stripe. */}
+              skipped for fast testing. Stripe is real (test mode) — right
+              after account creation, you'll be sent to Stripe's real test
+              pages to connect a payout account or complete checkout. */}
           <div style={{ fontSize: 11, color: "#3E7A4B", fontWeight: 700, background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 6, padding: "8px 10px", display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
             🧪 TEST MODE — DOT/MC, COI, and business verification are skipped
           </div>
 
-          {/* ── STRIPE SECTION ── */}
           <div style={{ borderTop: "1px solid #EEE8DA", paddingTop: 12 }}>
-            {role === "trucker" ? (
-              // Carrier — connect Stripe payout account
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
-                  <CreditCard size={13} color="#635BFF" /> Required: connect your Stripe payout account
-                </div>
-                <div style={{ fontSize: 11, color: "#6B6557", marginBottom: 8, lineHeight: 1.5 }}>
-                  Stripe is used to deposit your load earnings directly to your bank account. Free instant payouts, no fees. You'll need a Stripe account — create one free at stripe.com.
-                </div>
-                {!stripeConnected ? (
-                  <button onClick={connectStripePayoutMock} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
-                    <CreditCard size={15} /> Connect with Stripe — receive payments
-                  </button>
-                ) : (
-                  <div style={{ background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#3E7A4B" }}>
-                    <CheckCircle2 size={15} /> Stripe payout account connected — you're ready to receive payments
-                  </div>
-                )}
-                <div style={{ fontSize: 10, color: "#9A958A", marginTop: 6 }}>
-                  Secured by Stripe. Direct Freight Co never sees your bank account details.
-                </div>
-              </div>
-            ) : (
-              // Shipper — add payment method
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
-                  <CreditCard size={13} color="#635BFF" /> Required: add a payment method
-                </div>
-                <div style={{ fontSize: 11, color: "#6B6557", marginBottom: 8, lineHeight: 1.5 }}>
-                  Your card is charged for load payments and any automated detention fees. Subscriptions are billed here too.
-                </div>
-                {!stripeConnected ? (
-                  !showStripeCard ? (
-                    <button onClick={() => setShowStripeCard(true)} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%" }}>
-                      <CreditCard size={15} /> Add payment method
-                    </button>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "#F8F5EE", borderRadius: 8, padding: 12 }}>
-                      <Field label="Name on card"><input value={stripeNameOnCard} onChange={(e) => setStripeNameOnCard(e.target.value)} style={inputStyle} /></Field>
-                      <Field label="Card number"><input value={stripeCardNumber} onChange={(e) => setStripeCardNumber(formatCard(e.target.value))} placeholder="4242 4242 4242 4242" style={inputStyle} /></Field>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <Field label="Expiry"><input value={stripeExp} onChange={(e) => setStripeExp(formatExp(e.target.value))} placeholder="MM/YY" style={inputStyle} /></Field>
-                        <Field label="CVC"><input value={stripeCvc} onChange={(e) => setStripeCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="123" style={inputStyle} /></Field>
-                      </div>
-                      <button onClick={saveStripeCard} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save card</button>
-                      <div style={{ fontSize: 10, color: "#9A958A" }}>Secured by Stripe Elements. Direct Freight Co never stores raw card numbers.</div>
-                    </div>
-                  )
-                ) : (
-                  <div style={{ background: "#F1F8F2", border: "1px solid #BFE0C6", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#3E7A4B" }}>
-                    <CheckCircle2 size={15} /> Card ending in {stripeCardNumber.replace(/\D/g, "").slice(-4)} added — you're ready to post loads
-                  </div>
-                )}
-              </div>
-            )}
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#44484D", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+              <CreditCard size={13} color="#635BFF" />
+              {role === "trucker" ? "Next: connect your Stripe payout account (test mode)" : "Next: add a payment method (test mode)"}
+            </div>
+            <div style={{ fontSize: 11, color: "#6B6557", lineHeight: 1.5 }}>
+              {role === "trucker"
+                ? "Right after you create your account, you'll be sent to Stripe's real test Connect page. No real bank needed — use Stripe's test routing/account numbers."
+                : "Right after you create your account, you'll be sent to Stripe's real test Checkout page. Use test card 4242 4242 4242 4242, any future expiry, any CVC."}
+            </div>
           </div>
 
           <TermsCheckbox checked={agreedToTerms} onChange={setAgreedToTerms} onOpenTerms={() => setShowTerms(true)} role={role} />
-          <button onClick={trySignup} disabled={!agreedToTerms || !stripeConnected} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms && stripeConnected ? 1 : 0.5 }}>
+          <button onClick={trySignup} disabled={!agreedToTerms} style={{ ...primaryBtn(accent), marginTop: 8, opacity: agreedToTerms ? 1 : 0.5 }}>
             Create account
           </button>
-          {!stripeConnected && <div style={{ fontSize: 11, color: "#C0432B", textAlign: "center" }}>{role === "trucker" ? "Connect your Stripe account above to continue" : "Add a payment method above to continue"}</div>}
         </div>
       )}
     </Card>
@@ -5281,9 +5274,12 @@ function DetentionTracker({ load, me }) {
   return (
     <div style={{ marginTop: 10 }}>
       {gpsStatus === "idle" && (
-        <div style={{ border: "1px solid #E2DCCC", borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ border: load.requirements?.requireGpsTracking ? "1px solid #FFD98C" : "1px solid #E2DCCC", background: load.requirements?.requireGpsTracking ? "#FFF6E5" : "#fff", borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <div style={{ fontSize: 12, color: "#6B6557", display: "flex", alignItems: "center", gap: 6 }}>
-            <Navigation size={13} /> Enable GPS to track detention time automatically
+            <Navigation size={13} />
+            {load.requirements?.requireGpsTracking
+              ? <span><b style={{ color: "#B5790A" }}>This shipper requires live GPS tracking</b> for this load — also enables automatic detention pay.</span>
+              : "GPS tracking is optional on this load — enable it if you'd like automatic detention pay tracked for you."}
           </div>
           <button onClick={startTracking} style={{ ...primaryBtn("#FFB400"), padding: "7px 14px", display: "flex", alignItems: "center", gap: 5 }}>
             <Navigation size={13} /> Start tracking
@@ -6946,13 +6942,19 @@ function ProfileForm({ me, myLoads, onSave, onConnectPayout, onDisconnectPayout 
 }
 
 function PayoutCard({ payout, onConnect, onDisconnect }) {
-  const [open, setOpen] = useState(false);
-  const [bankName, setBankName] = useState(""); const [last4, setLast4] = useState("");
+  const [connecting, setConnecting] = useState(false);
 
+  // Mirrors the real Stripe Connect flow: a carrier is redirected to Stripe's
+  // own secure onboarding page to enter their real bank details there — never
+  // directly into a Direct Freight Co form. This mock simulates that redirect
+  // and comes back "connected," matching exactly what real Stripe Connect
+  // returns (an account reference, never actual bank account numbers).
   const connect = () => {
-    if (!bankName || !last4) { alert("Enter a bank name and the last 4 digits of your account."); return; }
-    onConnect({ bankName: `${bankName} ••${last4}` });
-    setOpen(false); setBankName(""); setLast4("");
+    setConnecting(true);
+    setTimeout(() => {
+      onConnect({ connected: true, provider: "Stripe Connect" });
+      setConnecting(false);
+    }, 600);
   };
 
   return (
@@ -6961,24 +6963,17 @@ function PayoutCard({ payout, onConnect, onDisconnect }) {
         <Wallet size={18} color="#FFB400" /> Get Paid
       </div>
       <div style={{ fontSize: 13, color: "#6B6557", marginBottom: 16, lineHeight: 1.5 }}>
-        When a shipper releases payment on a delivered load, it goes straight to your bank — Direct Freight Co never holds your money.
+        When a shipper releases payment on a delivered load, it goes straight to your bank via Stripe — Direct Freight Co never holds your money, and never sees your bank account details. You'll enter your real bank info on Stripe's own secure page, not here.
       </div>
       {payout?.connected ? (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}><ShieldCheck size={16} color="#3E7A4B" /> {payout.bankName}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}><ShieldCheck size={16} color="#3E7A4B" /> {payout.provider || "Stripe Connect"} — payout account connected</div>
           <button onClick={onDisconnect} style={{ ...ghostBtn, fontSize: 12, color: "#FF5A1F" }}>Disconnect</button>
         </div>
-      ) : !open ? (
-        <button onClick={() => setOpen(true)} style={{ ...primaryBtn("#FFB400") }}>Connect bank account</button>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <Field label="Bank name"><input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="e.g. Chase" style={inputStyle} /></Field>
-          <Field label="Last 4 digits of account"><input value={last4} onChange={(e) => setLast4(e.target.value.replace(/\D/g, "").slice(0, 4))} style={inputStyle} /></Field>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={connect} style={{ ...primaryBtn("#FFB400"), padding: "10px 18px" }}>Connect</button>
-            <button onClick={() => setOpen(false)} style={ghostBtn}>Cancel</button>
-          </div>
-        </div>
+        <button onClick={connect} disabled={connecting} style={{ background: "#635BFF", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", opacity: connecting ? 0.7 : 1 }}>
+          <CreditCard size={15} /> {connecting ? "Connecting…" : "Connect with Stripe"}
+        </button>
       )}
     </Card>
   );
@@ -9155,6 +9150,8 @@ function OperatorDisputesPanel() {
   const [selected, setSelected] = useState(null);
   const [resolution, setResolution] = useState("");
   const [notes, setNotes] = useState("");
+  const [releasing, setReleasing] = useState(false);
+  const [releaseConfirm, setReleaseConfirm] = useState(false);
 
   useEffect(() => {
     api.get("/api/disputes")
@@ -9169,6 +9166,27 @@ function OperatorDisputesPanel() {
       setDisputes(prev => prev.map(d => d.id === id ? dispute : d));
       setSelected(null);
     } catch (e) { alert(e.message); }
+  };
+
+  // Operator-initiated payment release — for when a dispute is resolved in
+  // the carrier's favor and payment needs to move even though the shipper
+  // hasn't (or won't) click "Release payment" themselves. Same effect as
+  // the shipper's own release button, just triggered from the dispute review.
+  const releasePaymentForDispute = async () => {
+    if (!selected?.load_id) { alert("This dispute has no associated load ID to release payment on."); return; }
+    setReleasing(true);
+    try {
+      await api.patch(`/api/loads/${selected.load_id}`, { paid: true, paid_at: new Date().toISOString() });
+      const resolutionNote = resolution.trim()
+        ? `${resolution.trim()} [Payment released by operator on ${new Date().toLocaleDateString()}]`
+        : `Payment released by operator on ${new Date().toLocaleDateString()} to resolve this dispute.`;
+      await update(selected.id, { status: "resolved", resolution: resolutionNote, operator_notes: notes });
+      setReleaseConfirm(false);
+    } catch (e) {
+      alert("Could not release payment: " + e.message);
+    } finally {
+      setReleasing(false);
+    }
   };
 
   const statusColor = { open: "#C0432B", under_review: "#B5790A", resolved: "#3E7A4B", dismissed: "#9A958A" };
@@ -9190,7 +9208,7 @@ function OperatorDisputesPanel() {
               <div style={{ fontSize: 11, color: "#9A958A" }}>Load ID: {d.load_id} · {new Date(d.created_at).toLocaleDateString()}</div>
               <div style={{ fontSize: 12, color: "#C9C2B3", marginTop: 6, lineHeight: 1.5 }}>{d.description}</div>
             </div>
-            <button onClick={() => { setSelected(d); setResolution(d.resolution || ""); setNotes(d.operator_notes || ""); }}
+            <button onClick={() => { setSelected(d); setResolution(d.resolution || ""); setNotes(d.operator_notes || ""); setReleaseConfirm(false); }}
               style={{ background: "#FFB400", border: "none", color: "#1B1D21", borderRadius: 6, padding: "6px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
               Review
             </button>
@@ -9215,6 +9233,34 @@ function OperatorDisputesPanel() {
                 <button onClick={() => update(selected.id, { status: "resolved", resolution, operator_notes: notes })} style={{ background: "#3E7A4B", border: "none", color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Mark Resolved</button>
                 <button onClick={() => update(selected.id, { status: "dismissed", resolution, operator_notes: notes })} style={{ background: "#44484D", border: "none", color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Dismiss</button>
                 <button onClick={() => setSelected(null)} style={{ background: "#2A2D32", border: "none", color: "#9A958A", borderRadius: 6, padding: "8px 12px", fontSize: 12, cursor: "pointer" }}>Close</button>
+              </div>
+
+              {/* Payment release — separated from the routine actions above
+                  since it moves real money once Stripe is live. Requires an
+                  explicit second confirmation step. */}
+              <div style={{ borderTop: "1px solid #2A2D32", marginTop: 6, paddingTop: 12 }}>
+                <div style={{ fontSize: 11, color: "#9A958A", marginBottom: 8, lineHeight: 1.5 }}>
+                  If this dispute is resolved in the carrier's favor and the shipper hasn't released payment themselves, you can release it directly for load <b style={{ color: "#F2EDE4" }}>{selected.load_id}</b>.
+                </div>
+                {!releaseConfirm ? (
+                  <button onClick={() => setReleaseConfirm(true)} style={{ background: "transparent", border: "1px solid #3E7A4B", color: "#3E7A4B", borderRadius: 6, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <DollarSign size={13} /> Release Payment to Carrier
+                  </button>
+                ) : (
+                  <div style={{ background: "#2A2D32", border: "1px solid #3E7A4B", borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#F2EDE4", marginBottom: 10, fontWeight: 600 }}>
+                      Confirm: release payment on this load to the carrier now? This also marks the dispute resolved.
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={releasePaymentForDispute} disabled={releasing} style={{ background: "#3E7A4B", border: "none", color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", opacity: releasing ? 0.6 : 1 }}>
+                        {releasing ? "Releasing…" : "Yes, release payment"}
+                      </button>
+                      <button onClick={() => setReleaseConfirm(false)} disabled={releasing} style={{ background: "transparent", border: "1px solid #44484D", color: "#9A958A", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
